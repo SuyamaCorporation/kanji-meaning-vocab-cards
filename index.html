@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>漢字語源・意味フラッシュカード</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+  *:focus-visible { outline: 2px solid #dc2626; outline-offset: 2px; }
+  .card-wrap { perspective: 1200px; cursor: pointer; }
+  .card-3d { transition: transform 0.6s cubic-bezier(0.4,0,0.2,1); transform-style: preserve-3d; position: relative; min-height: 320px; }
+  .card-3d.flipped { transform: rotateY(180deg); }
+  .face { backface-visibility: hidden; -webkit-backface-visibility: hidden; position: absolute; inset: 0; border-radius: 1rem; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 2rem; }
+  .face-back { transform: rotateY(180deg); }
+  @keyframes bounceIn { 0%{transform:scale(0.6);opacity:0;} 70%{transform:scale(1.08);} 100%{transform:scale(1);opacity:1;} }
+  .bounce-in { animation: bounceIn 0.4s ease; }
+  .progress-ring { transition: stroke-dashoffset 0.5s ease; }
+</style>
+</head>
+<body class="bg-gradient-to-br from-red-50 via-orange-50 to-yellow-50 min-h-screen p-4">
+
+<div class="max-w-xl mx-auto">
+  <header class="text-center py-5">
+    <h1 class="text-3xl font-bold text-red-800">漢字語源・意味カード</h1>
+    <p class="text-red-500 mt-1">JLPTレベル別 間隔反復学習</p>
+  </header>
+
+  <!-- Filter & Stats -->
+  <div class="bg-white rounded-2xl shadow p-4 mb-4 flex flex-wrap gap-3 items-center">
+    <div>
+      <label class="text-xs font-semibold text-gray-500 block mb-1">JLPTレベル</label>
+      <div class="flex gap-2" role="group" aria-label="JLPTレベル選択">
+        <button onclick="setLevel('all')" id="btn-all" class="level-btn px-3 py-1.5 rounded-lg text-sm font-semibold bg-red-600 text-white transition">全て</button>
+        <button onclick="setLevel('N5N4')" id="btn-N5N4" class="level-btn px-3 py-1.5 rounded-lg text-sm font-semibold bg-gray-100 text-gray-700 hover:bg-red-100 transition">N5-N4</button>
+        <button onclick="setLevel('N3N2')" id="btn-N3N2" class="level-btn px-3 py-1.5 rounded-lg text-sm font-semibold bg-gray-100 text-gray-700 hover:bg-red-100 transition">N3-N2</button>
+        <button onclick="setLevel('N1')" id="btn-N1" class="level-btn px-3 py-1.5 rounded-lg text-sm font-semibold bg-gray-100 text-gray-700 hover:bg-red-100 transition">N1</button>
+      </div>
+    </div>
+    <button onclick="toggleShuffle()" id="btn-shuffle" class="ml-auto px-3 py-1.5 bg-orange-100 text-orange-700 rounded-lg text-sm font-semibold hover:bg-orange-200 transition">🔀 シャッフル</button>
+  </div>
+
+  <!-- Progress -->
+  <div class="bg-white rounded-2xl shadow p-3 mb-4 flex gap-4 text-center text-sm">
+    <div class="flex-1"><p class="text-xs text-gray-400">残り</p><p id="stat-remain" class="font-bold text-red-700">-</p></div>
+    <div class="flex-1"><p class="text-xs text-gray-400">知ってた</p><p id="stat-known" class="font-bold text-green-600">-</p></div>
+    <div class="flex-1"><p class="text-xs text-gray-400">曖昧</p><p id="stat-fuzzy" class="font-bold text-yellow-500">-</p></div>
+    <div class="flex-1"><p class="text-xs text-gray-400">要復習</p><p id="stat-review" class="font-bold text-red-500">-</p></div>
+  </div>
+
+  <!-- Card -->
+  <div id="card-wrap" class="card-wrap mb-4" onclick="flipCard()" tabindex="0" role="button" aria-label="カードをめくる" onkeydown="if(event.key==='Enter'||event.key===' ')flipCard()">
+    <div id="card-3d" class="card-3d bg-white rounded-2xl shadow-2xl">
+      <!-- Front -->
+      <div class="face bg-gradient-to-br from-white to-red-50 rounded-2xl">
+        <span id="level-badge" class="text-xs font-bold px-3 py-1 rounded-full mb-4 bg-red-100 text-red-700"></span>
+        <p id="kanji-char" class="text-9xl font-bold text-red-800 mb-4 bounce-in" style="font-family: 'serif';"></p>
+        <p class="text-xs text-gray-400 mt-4">タップしてめくる</p>
+      </div>
+      <!-- Back -->
+      <div class="face face-back bg-gradient-to-br from-amber-50 to-orange-50 rounded-2xl text-left">
+        <div class="w-full">
+          <div class="flex gap-3 mb-3 flex-wrap">
+            <span class="bg-blue-100 text-blue-700 text-xs font-bold px-2 py-1 rounded">音: <span id="onyomi"></span></span>
+            <span class="bg-green-100 text-green-700 text-xs font-bold px-2 py-1 rounded">訓: <span id="kunyomi"></span></span>
+          </div>
+          <p class="font-bold text-gray-800 text-lg mb-1">意味: <span id="meaning"></span></p>
+          <p class="text-xs text-orange-600 mb-3 leading-relaxed">語源: <span id="origin"></span></p>
+          <div class="border-t border-gray-200 pt-3">
+            <p class="text-sm text-gray-700 mb-1 leading-relaxed">📝 <span id="ex1"></span></p>
+            <p class="text-sm text-gray-700 leading-relaxed">📝 <span id="ex2"></span></p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Self-rating (shown after flip) -->
+  <div id="rating-buttons" class="hidden flex gap-2 mb-4">
+    <button onclick="rate('known')" class="flex-1 bg-green-100 hover:bg-green-200 text-green-700 font-bold py-3 rounded-xl transition">✓ 知ってた</button>
+    <button onclick="rate('fuzzy')" class="flex-1 bg-yellow-100 hover:bg-yellow-200 text-yellow-700 font-bold py-3 rounded-xl transition">△ 曖昧</button>
+    <button onclick="rate('review')" class="flex-1 bg-red-100 hover:bg-red-200 text-red-700 font-bold py-3 rounded-xl transition">✗ 要復習</button>
+  </div>
+
+  <!-- Nav -->
+  <div class="flex justify-between items-center text-sm text-gray-400 mb-4">
+    <button onclick="prevCard()" class="px-4 py-2 bg-white rounded-lg shadow hover:bg-gray-50" aria-label="前の漢字">← 前</button>
+    <span id="nav-progress" class="font-semibold text-gray-600"></span>
+    <button onclick="nextCard()" class="px-4 py-2 bg-white rounded-lg shadow hover:bg-gray-50" aria-label="次の漢字">次 →</button>
+  </div>
+
+  <!-- Finished -->
+  <div id="finish-panel" class="hidden bg-white rounded-2xl shadow p-8 text-center">
+    <p class="text-5xl mb-3">🎌</p>
+    <p class="text-2xl font-bold text-gray-700 mb-2">デッキ完走！</p>
+    <div id="finish-stats" class="text-sm text-gray-500 mb-4"></div>
+    <div class="flex gap-3 justify-center">
+      <button onclick="restartAll()" class="bg-red-500 hover:bg-red-600 text-white px-5 py-2.5 rounded-xl font-semibold transition">最初から</button>
+      <button onclick="restartReview()" class="bg-orange-400 hover:bg-orange-500 text-white px-5 py-2.5 rounded-xl font-semibold transition">要復習のみ再挑戦</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const KANJI_DATA = [
+  // N5-N4 (20)
+  {kanji:'山',level:'N5',onyomi:'サン',kunyomi:'やま',meaning:'山・高い地形',origin:'山の形を象形した文字。3つの峰を横から見た形。',ex1:'富士山（ふじさん）に登る',ex2:'山道（やまみち）を歩く'},
+  {kanji:'水',level:'N5',onyomi:'スイ',kunyomi:'みず',meaning:'水・液体',origin:'流れる水の波紋を象形。中央の縦線と両側の波線。',ex1:'水道（すいどう）から水が出る',ex2:'水泳（すいえい）が得意だ'},
+  {kanji:'火',level:'N5',onyomi:'カ',kunyomi:'ひ',meaning:'火・炎',origin:'炎が燃え上がる形を象形した文字。',ex1:'キャンプで火（ひ）を起こす',ex2:'火事（かじ）に注意する'},
+  {kanji:'電',level:'N5',onyomi:'デン',kunyomi:'',meaning:'電気・稲妻',origin:'雨の下に稲妻（申）。雷雨から電気の意。',ex1:'電車（でんしゃ）に乗る',ex2:'電気（でんき）をつける'},
+  {kanji:'車',level:'N5',onyomi:'シャ',kunyomi:'くるま',meaning:'車・乗り物',origin:'車輪付きの乗り物を真上から見た象形文字。',ex1:'自動車（じどうしゃ）で旅行する',ex2:'電車（でんしゃ）で通学する'},
+  {kanji:'食',level:'N5',onyomi:'ショク',kunyomi:'たべる',meaning:'食べる・食事',origin:'食器に蓋をした形。食べ物を容器に盛る意。',ex1:'食堂（しょくどう）でランチを食べる',ex2:'食事（しょくじ）の時間'},
+  {kanji:'体',level:'N5',onyomi:'タイ',kunyomi:'からだ',meaning:'体・身体',origin:'人（亻）＋本。人の根本=身体の意。',ex1:'体育（たいいく）の授業',ex2:'体温（たいおん）を測る'},
+  {kanji:'仕',level:'N4',onyomi:'シ',kunyomi:'つかえる',meaning:'仕える・仕事をする',origin:'人（亻）＋士。士に仕える意から仕事の意へ。',ex1:'仕事（しごと）を探す',ex2:'会社に仕える'},
+  {kanji:'気',level:'N5',onyomi:'キ',kunyomi:'',meaning:'気・空気・気持ち',origin:'米から立ち上る湯気を表す。目に見えないエネルギーの意。',ex1:'天気（てんき）がいい',ex2:'気分（きぶん）が良い'},
+  {kanji:'学',level:'N5',onyomi:'ガク',kunyomi:'まなぶ',meaning:'学ぶ・学問',origin:'両手で子どもを覆い学ばせる形。子に知識を与える意。',ex1:'大学（だいがく）で勉強する',ex2:'学習（がくしゅう）する'},
+  {kanji:'語',level:'N5',onyomi:'ゴ',kunyomi:'かたる',meaning:'言葉・語る',origin:'言（言葉）＋吾（自分）。自分の言葉で語る意。',ex1:'日本語（にほんご）を話す',ex2:'英語（えいご）の勉強'},
+  {kanji:'時',level:'N5',onyomi:'ジ',kunyomi:'とき',meaning:'時間・時刻',origin:'日（太陽）＋寺（規則正しい場所）。太陽の動きによる時間。',ex1:'時間（じかん）を守る',ex2:'時計（とけい）を見る'},
+  {kanji:'間',level:'N4',onyomi:'カン',kunyomi:'あいだ',meaning:'間・すき間・時間',origin:'門の隙間から月（光）が見える形。すき間の意。',ex1:'部屋の間（ま）に窓がある',ex2:'時間（じかん）が足りない'},
+  {kanji:'高',level:'N5',onyomi:'コウ',kunyomi:'たかい',meaning:'高い・価値が高い',origin:'高い建物（楼閣）を象形した文字。',ex1:'高校（こうこう）生',ex2:'物価（ぶっか）が高い'},
+  {kanji:'長',level:'N5',onyomi:'チョウ',kunyomi:'ながい',meaning:'長い・長さ・首長',origin:'長い髪の老人を象形した文字。長老・首長の意。',ex1:'社長（しゃちょう）に報告する',ex2:'長い（ながい）距離を走る'},
+  {kanji:'新',level:'N5',onyomi:'シン',kunyomi:'あたらしい',meaning:'新しい・新鮮',origin:'木を斧（斤）で切る（辛）。新しく切り出した木の意。',ex1:'新幹線（しんかんせん）で移動',ex2:'新しい（あたらしい）服を買う'},
+  {kanji:'上',level:'N5',onyomi:'ジョウ',kunyomi:'うえ',meaning:'上・上方・優れた',origin:'基準線（一）の上に点。上方向を示す指事文字。',ex1:'上司（じょうし）に相談する',ex2:'棚の上（うえ）に置く'},
+  {kanji:'下',level:'N5',onyomi:'カ',kunyomi:'した',meaning:'下・下方・下げる',origin:'基準線（一）の下に点。下方向を示す指事文字。',ex1:'地下鉄（ちかてつ）に乗る',ex2:'机の下（した）を見る'},
+  {kanji:'人',level:'N5',onyomi:'ジン',kunyomi:'ひと',meaning:'人間・人',origin:'人が立って歩く姿を横から見た象形文字。',ex1:'日本人（にほんじん）として誇り',ex2:'人々（ひとびと）が集まる'},
+  {kanji:'国',level:'N5',onyomi:'コク',kunyomi:'くに',meaning:'国・国家',origin:'囲い（囗）の中に武器（或）。武力で守られた領域。',ex1:'外国（がいこく）に行く',ex2:'国際（こくさい）問題'},
+  // N3-N2 (20)
+  {kanji:'判',level:'N3',onyomi:'ハン',kunyomi:'わかる',meaning:'判断する・判定',origin:'刀（刀）で牛（半）を二つに分ける。区別・判断の意。',ex1:'判断（はんだん）を下す',ex2:'裁判（さいばん）が行われる'},
+  {kanji:'状',level:'N3',onyomi:'ジョウ',kunyomi:'',meaning:'状態・形状・手紙',origin:'犬（犬）の形（爿）。形・状態の意から手紙の意へ。',ex1:'現状（げんじょう）を把握する',ex2:'招待状（しょうたいじょう）を送る'},
+  {kanji:'経',level:'N3',onyomi:'ケイ',kunyomi:'へる',meaning:'経験・経由・経済',origin:'糸（糸）＋巠（縦糸を張る）。縦糸が通ることから「経由」「経過」の意。',ex1:'経験（けいけん）を積む',ex2:'経済（けいざい）成長'},
+  {kanji:'確',level:'N3',onyomi:'カク',kunyomi:'たしかめる',meaning:'確認・確かな',origin:'石（石）＋隹（鳥）。石のように固く定まった意。',ex1:'確認（かくにん）をとる',ex2:'確実（かくじつ）に進める'},
+  {kanji:'機',level:'N3',onyomi:'キ',kunyomi:'',meaning:'機会・機械・機能',origin:'木（木）＋幾（わずかな動き）。機を見て動く=機会の意。',ex1:'機会（きかい）を逃さない',ex2:'飛行機（ひこうき）に乗る'},
+  {kanji:'表',level:'N3',onyomi:'ヒョウ',kunyomi:'おもて',meaning:'表面・表現・表す',origin:'毛皮（衣）の毛の部分。外側・表面の意。',ex1:'表現（ひょうげん）が豊かだ',ex2:'代表（だいひょう）して話す'},
+  {kanji:'関',level:'N3',onyomi:'カン',kunyomi:'かかわる',meaning:'関係・関わる・関所',origin:'門（門）＋糸を巻く形。門に閂（かんぬき）をかける意。',ex1:'関係（かんけい）を築く',ex2:'関心（かんしん）を持つ'},
+  {kanji:'受',level:'N3',onyomi:'ジュ',kunyomi:'うける',meaning:'受け取る・受ける',origin:'舟（爪）から手（又）が受け取る形。受け渡しの意。',ex1:'受験（じゅけん）に合格する',ex2:'注文を受け付ける'},
+  {kanji:'提',level:'N3',onyomi:'テイ',kunyomi:'',meaning:'提案・提出・提供',origin:'手（扌）＋是（正しい）。手でしっかり差し出す意。',ex1:'提案（ていあん）をする',ex2:'書類を提出（ていしゅつ）する'},
+  {kanji:'改',level:'N3',onyomi:'カイ',kunyomi:'あらためる',meaning:'改善・改める',origin:'己（自分）＋攴（打つ）。自分を打ち直す=改める意。',ex1:'改善（かいぜん）を繰り返す',ex2:'法律を改正（かいせい）する'},
+  {kanji:'続',level:'N3',onyomi:'ゾク',kunyomi:'つづく',meaning:'続く・継続・接続',origin:'糸（糸）＋売（のばす）。糸を継ぎ足して続ける意。',ex1:'継続（けいぞく）は力なり',ex2:'接続（せつぞく）を確認する'},
+  {kanji:'情',level:'N3',onyomi:'ジョウ',kunyomi:'',meaning:'感情・情報・情け',origin:'心（忄）＋青（澄んだ）。澄んだ心の動き=感情の意。',ex1:'情報（じょうほう）を収集する',ex2:'感情（かんじょう）をコントロール'},
+  {kanji:'論',level:'N3',onyomi:'ロン',kunyomi:'',meaning:'議論・論理・理論',origin:'言（言葉）＋侖（整理された言葉）。整理された言葉=論の意。',ex1:'議論（ぎろん）を深める',ex2:'論理的（ろんりてき）に話す'},
+  {kanji:'費',level:'N3',onyomi:'ヒ',kunyomi:'',meaning:'費用・費やす',origin:'弗（散らかる）＋貝（お金）。お金が散らかる=消費の意。',ex1:'費用（ひよう）を削減する',ex2:'時間を費やす（ついやす）'},
+  {kanji:'率',level:'N3',onyomi:'リツ',kunyomi:'ひきいる',meaning:'率・比率・率いる',origin:'縄をたぐりよせる形。引き率いる・比率の意。',ex1:'正答率（せいとうりつ）を上げる',ex2:'効率（こうりつ）よく作業する'},
+  {kanji:'境',level:'N2',onyomi:'キョウ',kunyomi:'さかい',meaning:'境界・環境・境地',origin:'土（土）＋竟（尽きる所）。土地の尽きる所=境の意。',ex1:'環境（かんきょう）問題',ex2:'国境（こっきょう）を越える'},
+  {kanji:'証',level:'N2',onyomi:'ショウ',kunyomi:'',meaning:'証明・証拠',origin:'言（言葉）＋登（確かめる）。言葉で確かめる=証明の意。',ex1:'証明書（しょうめいしょ）を提出',ex2:'証拠（しょうこ）を集める'},
+  {kanji:'導',level:'N2',onyomi:'ドウ',kunyomi:'みちびく',meaning:'導く・指導',origin:'道（みち）＋寸（手）。手で道を示す=導く意。',ex1:'指導（しどう）を受ける',ex2:'部下を導く（みちびく）'},
+  {kanji:'評',level:'N2',onyomi:'ヒョウ',kunyomi:'',meaning:'評価・批評',origin:'言（言葉）＋平（平等）。平等に言葉で判断する意。',ex1:'評価（ひょうか）を上げる',ex2:'批評（ひひょう）をする'},
+  {kanji:'模',level:'N2',onyomi:'モ',kunyomi:'',meaning:'模範・模倣・規模',origin:'木（木）＋莫（はかる）。木を型にして計る=模型の意。',ex1:'規模（きぼ）が大きい',ex2:'模範（もはん）を示す'},
+  // N1 (20)
+  {kanji:'概',level:'N1',onyomi:'ガイ',kunyomi:'',meaning:'概念・概要・おおよそ',origin:'木（木）＋旣（すでに）。穀物をならす棒から「おおよそ」の意。',ex1:'概念（がいねん）を理解する',ex2:'概要（がいよう）を説明する'},
+  {kanji:'抽',level:'N1',onyomi:'チュウ',kunyomi:'',meaning:'抽象・抽出・引き出す',origin:'手（扌）＋由（中から出る）。中から引き出す意。',ex1:'抽象（ちゅうしょう）的な考え',ex2:'抽出（ちゅうしゅつ）する'},
+  {kanji:'哲',level:'N1',onyomi:'テツ',kunyomi:'',meaning:'哲学・賢い',origin:'折（折れる）＋口（言葉）。折り目正しく語る賢人の意。',ex1:'哲学（てつがく）を学ぶ',ex2:'哲人（てつじん）の言葉'},
+  {kanji:'制',level:'N1',onyomi:'セイ',kunyomi:'',meaning:'制度・制限・制御',origin:'木を刀（刀）で整える形。整えて管理する=制度の意。',ex1:'制度（せいど）を整備する',ex2:'規制（きせい）を設ける'},
+  {kanji:'哀',level:'N1',onyomi:'アイ',kunyomi:'あわれ',meaning:'哀しみ・哀れ',origin:'衣（衣）の中に口（泣き声）。衣に包まれた悲しみの声。',ex1:'哀愁（あいしゅう）を感じる',ex2:'哀れみ（あわれみ）の心'},
+  {kanji:'渉',level:'N1',onyomi:'ショウ',kunyomi:'',meaning:'渉外・交渉・渡る',origin:'水（氵）＋歩（歩く）。水を歩き渡る意から交渉の意。',ex1:'交渉（こうしょう）が成立する',ex2:'渉外（しょうがい）担当'},
+  {kanji:'顕',level:'N1',onyomi:'ケン',kunyomi:'',meaning:'顕著・顕在・現れる',origin:'日（太陽）＋頁（頭）。頭が日に照らされて際立つ意。',ex1:'顕著（けんちょ）な成果',ex2:'顕在化（けんざいか）した問題'},
+  {kanji:'弊',level:'N1',onyomi:'ヘイ',kunyomi:'',meaning:'弊害・弊社・弊る',origin:'敝（破れる）＋廾（両手）。破れ疲れた意から害の意。',ex1:'弊害（へいがい）を除く',ex2:'弊社（へいしゃ）の方針'},
+  {kanji:'懸',level:'N1',onyomi:'ケン',kunyomi:'かかる',meaning:'懸念・懸ける・かかる',origin:'心（心）＋縣（ぶら下がる）。心がぶら下がる=懸念の意。',ex1:'懸念（けねん）を示す',ex2:'懸念事項（けねんじこう）を整理'},
+  {kanji:'稀',level:'N1',onyomi:'キ',kunyomi:'まれ',meaning:'稀少・まれ・稀有',origin:'禾（稲）が散らばって少ない形。少ない・まれの意。',ex1:'稀少（きしょう）価値がある',ex2:'稀有（けう）な才能'},
+  {kanji:'漠',level:'N1',onyomi:'バク',kunyomi:'',meaning:'漠然・砂漠・広大',origin:'水（氵）＋莫（広い）。水が広く広がる砂漠の意。',ex1:'漠然（ばくぜん）とした不安',ex2:'砂漠（さばく）を旅する'},
+  {kanji:'葛',level:'N1',onyomi:'カツ',kunyomi:'',meaning:'葛藤・葛',origin:'艸（草）＋曷（絡まる）。つる植物が絡まる葛の象形。',ex1:'葛藤（かっとう）を抱える',ex2:'葛（くず）粉で料理する'},
+  {kanji:'憤',level:'N1',onyomi:'フン',kunyomi:'いきどおる',meaning:'憤怒・憤る・激しい怒り',origin:'心（忄）＋賁（激しい）。心が激しく高ぶる怒りの意。',ex1:'憤慨（ふんがい）する',ex2:'義憤（ぎふん）を感じる'},
+  {kanji:'礎',level:'N1',onyomi:'ソ',kunyomi:'いしずえ',meaning:'基礎・礎石・基盤',origin:'石（石）＋楚（おおかみの植物）。建物を支える礎石の意。',ex1:'基礎（きそ）を固める',ex2:'礎石（そせき）を築く'},
+  {kanji:'矛',level:'N1',onyomi:'ム',kunyomi:'ほこ',meaning:'矛盾・矛（武器）',origin:'長柄の刺突武器の象形。矛盾の語源となった武器。',ex1:'矛盾（むじゅん）を指摘する',ex2:'矛（ほこ）と盾（たて）'},
+  {kanji:'紡',level:'N1',onyomi:'ボウ',kunyomi:'つむぐ',meaning:'紡ぐ・紡績',origin:'糸（糸）＋方（方向）。糸を方向性を持って紡ぐ意。',ex1:'言葉を紡ぐ（つむぐ）',ex2:'紡績（ぼうせき）工場'},
+  {kanji:'跳',level:'N1',onyomi:'チョウ',kunyomi:'とぶ',meaning:'跳躍・跳ぶ',origin:'足（足）＋兆（予兆）。足が跳び上がる予兆=跳ぶ意。',ex1:'飛躍（ひやく）的に成長',ex2:'障害物を跳び越える'},
+  {kanji:'醸',level:'N1',onyomi:'ジョウ',kunyomi:'かもす',meaning:'醸造・醸成・かもす',origin:'酉（酒つぼ）＋襄（満ちる）。酒つぼが満ちる=醸造の意。',ex1:'雰囲気を醸成（じょうせい）する',ex2:'ビールを醸造（じょうぞう）する'},
+  {kanji:'漸',level:'N1',onyomi:'ゼン',kunyomi:'ようやく',meaning:'漸次・ようやく・徐々に',origin:'水（氵）＋斬（切る）。水が少しずつ進む意。',ex1:'漸次（ぜんじ）改善していく',ex2:'漸く（ようやく）完成した'},
+  {kanji:'蓄',level:'N1',onyomi:'チク',kunyomi:'たくわえる',meaning:'蓄積・貯蓄・蓄える',origin:'艸（草）＋畜（家畜）。草を蓄えるように積み重ねる意。',ex1:'経験を蓄積（ちくせき）する',ex2:'貯蓄（ちょちく）を増やす'},
+];
+
+let deck = [...KANJI_DATA];
+let currentIndex = 0;
+let isFlipped = false;
+let shuffleMode = false;
+let ratings = JSON.parse(localStorage.getItem('kanji-ratings') || '{}');
+let currentLevel = 'all';
+
+function setLevel(level) {
+  currentLevel = level;
+  document.querySelectorAll('.level-btn').forEach(b => b.classList.replace('bg-red-600','bg-gray-100') || b.classList.replace('text-white','text-gray-700'));
+  const btn = document.getElementById('btn-' + level);
+  if (btn) { btn.classList.replace('bg-gray-100','bg-red-600'); btn.classList.replace('text-gray-700','text-white'); }
+  buildDeck();
+}
+
+function buildDeck() {
+  deck = KANJI_DATA.filter(k => currentLevel === 'all' || k.level.startsWith(currentLevel.replace('N5N4','N5').replace('N3N2','N3')));
+  if (currentLevel === 'N5N4') deck = KANJI_DATA.filter(k => k.level === 'N5' || k.level === 'N4');
+  if (currentLevel === 'N3N2') deck = KANJI_DATA.filter(k => k.level === 'N3' || k.level === 'N2');
+  if (shuffleMode) for (let i = deck.length - 1; i > 0; i--) { const j = Math.floor(Math.random()*(i+1)); [deck[i],deck[j]]=[deck[j],deck[i]]; }
+  currentIndex = 0;
+  isFlipped = false;
+  document.getElementById('card-3d').classList.remove('flipped');
+  document.getElementById('rating-buttons').classList.add('hidden');
+  document.getElementById('finish-panel').classList.add('hidden');
+  document.getElementById('card-wrap').style.display = '';
+  showCard();
+}
+
+function toggleShuffle() {
+  shuffleMode = !shuffleMode;
+  document.getElementById('btn-shuffle').className = shuffleMode
+    ? 'ml-auto px-3 py-1.5 bg-orange-500 text-white rounded-lg text-sm font-semibold transition'
+    : 'ml-auto px-3 py-1.5 bg-orange-100 text-orange-700 rounded-lg text-sm font-semibold hover:bg-orange-200 transition';
+  buildDeck();
+}
+
+function showCard() {
+  if (currentIndex >= deck.length) {
+    document.getElementById('card-wrap').style.display = 'none';
+    document.getElementById('rating-buttons').classList.add('hidden');
+    const known = Object.values(ratings).filter(v=>v==='known').length;
+    const fuzzy = Object.values(ratings).filter(v=>v==='fuzzy').length;
+    const review = Object.values(ratings).filter(v=>v==='review').length;
+    document.getElementById('finish-stats').innerHTML =
+      `<p>知ってた: <strong class="text-green-600">${known}</strong> / 曖昧: <strong class="text-yellow-500">${fuzzy}</strong> / 要復習: <strong class="text-red-500">${review}</strong></p>`;
+    document.getElementById('finish-panel').classList.remove('hidden');
+    return;
+  }
+  const k = deck[currentIndex];
+  isFlipped = false;
+  document.getElementById('card-3d').classList.remove('flipped');
+  document.getElementById('rating-buttons').classList.add('hidden');
+
+  document.getElementById('level-badge').textContent = 'JLPT ' + k.level;
+  document.getElementById('kanji-char').textContent = k.kanji;
+  document.getElementById('onyomi').textContent = k.onyomi || '—';
+  document.getElementById('kunyomi').textContent = k.kunyomi || '—';
+  document.getElementById('meaning').textContent = k.meaning;
+  document.getElementById('origin').textContent = k.origin;
+  document.getElementById('ex1').textContent = k.ex1;
+  document.getElementById('ex2').textContent = k.ex2;
+  document.getElementById('nav-progress').textContent = `${currentIndex+1} / ${deck.length}`;
+  updateStats();
+}
+
+function flipCard() {
+  isFlipped = !isFlipped;
+  document.getElementById('card-3d').classList.toggle('flipped', isFlipped);
+  if (isFlipped) document.getElementById('rating-buttons').classList.remove('hidden');
+}
+
+function rate(result) {
+  const k = deck[currentIndex];
+  ratings[k.kanji] = result;
+  localStorage.setItem('kanji-ratings', JSON.stringify(ratings));
+  currentIndex++;
+  showCard();
+}
+
+function prevCard() { if (currentIndex > 0) { currentIndex--; showCard(); } }
+function nextCard() { currentIndex = Math.min(currentIndex + 1, deck.length); showCard(); }
+
+function restartAll() {
+  currentIndex = 0;
+  document.getElementById('finish-panel').classList.add('hidden');
+  document.getElementById('card-wrap').style.display = '';
+  showCard();
+}
+
+function restartReview() {
+  deck = deck.filter(k => ratings[k.kanji] === 'review' || ratings[k.kanji] === 'fuzzy' || !ratings[k.kanji]);
+  currentIndex = 0;
+  document.getElementById('finish-panel').classList.add('hidden');
+  document.getElementById('card-wrap').style.display = '';
+  showCard();
+}
+
+function updateStats() {
+  const known = Object.values(ratings).filter(v=>v==='known').length;
+  const fuzzy = Object.values(ratings).filter(v=>v==='fuzzy').length;
+  const review = Object.values(ratings).filter(v=>v==='review').length;
+  document.getElementById('stat-remain').textContent = (deck.length - currentIndex) + '字';
+  document.getElementById('stat-known').textContent = known + '字';
+  document.getElementById('stat-fuzzy').textContent = fuzzy + '字';
+  document.getElementById('stat-review').textContent = review + '字';
+}
+
+buildDeck();
+</script>
+</body>
+</html>
